@@ -22,6 +22,7 @@ target_aspect_ratio = 16 / 9  # Target aspect ratio for the overall display
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
 max_image_width = 600  # Downsize individual images to this width (will be adjusted)
 jpeg_quality = 85  # Quality for final output (1-100)
+rows = None  # Set to a specific number to override auto-calculation, or None for auto
 
 
 def extract_show_name_with_year(filename):
@@ -329,14 +330,19 @@ Poster Naming Scheme:
     
     # Calculate layout
     if parent_files:
-        num_rows = calculate_optimal_rows(len(parent_files))
+        # Use global rows if set, otherwise calculate optimal
+        if rows is not None:
+            num_rows = rows
+            print(f"\nUsing manually specified {num_rows} rows")
+        else:
+            num_rows = calculate_optimal_rows(len(parent_files))
+            print(f"\nCalculated optimal layout (targeting {target_aspect_ratio:.2f}:1 aspect ratio)")
         cols = ceil(len(parent_files) / num_rows)
-        actual_aspect = 16 / 9
-        print(f"\nLayout (targeting {target_aspect_ratio:.2f}:1 aspect ratio):")
+        print(f"Layout:")
         print(f"  Collection: {num_rows} rows tall (left)")
         print(f"  Parent posters: {num_rows} rows × {cols} columns (right)")
     else:
-        num_rows = 5  # Default if no parent posters
+        num_rows = rows if rows is not None else 5  # Use specified rows or default
     
     # Create the display
     print(f"\nGenerating display (resizing images to {max_image_width}px width)...")
