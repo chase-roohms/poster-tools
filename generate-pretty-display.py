@@ -18,7 +18,9 @@ import argparse
 
 # Configuration
 gap_size = 10  # Pixels between images
-target_aspect_ratio = 16 / 9  # Target aspect ratio for the overall display
+target_aspect_ratio = 4  # Target aspect ratio for the overall display
+min_aspect_ratio = target_aspect_ratio * 0.75  # Minimum aspect ratio (~1.33:1, roughly 4:3)
+max_aspect_ratio = target_aspect_ratio * 1.35  # Maximum aspect ratio (~2.4:1, roughly 21:9)
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
 max_image_width = 600  # Downsize individual images to this width (will be adjusted)
 jpeg_quality = 85  # Quality for final output (1-100)
@@ -116,6 +118,7 @@ def calculate_optimal_rows(num_posters, target_ratio=target_aspect_ratio):
     
     # First, try to find layouts where all rows are perfectly filled
     perfect_layouts = []
+    valid_layouts = []
     
     # Try different row counts from 2 to num_posters
     for rows in range(2, min(num_posters + 1, 20)):
@@ -141,17 +144,29 @@ def calculate_optimal_rows(num_posters, target_ratio=target_aspect_ratio):
         aspect_ratio = total_width / total_height
         diff = abs(aspect_ratio - target_ratio)
         
+        # Skip layouts that fall outside our ratio constraints
+        if aspect_ratio < min_aspect_ratio or aspect_ratio > max_aspect_ratio:
+            continue
+        
+        # Track valid layouts
+        valid_layouts.append((rows, diff, aspect_ratio))
+        
         # Check if all rows are full
         if num_posters % rows == 0:
-            perfect_layouts.append((rows, diff))
+            perfect_layouts.append((rows, diff, aspect_ratio))
         elif diff < best_diff:
             # Track best imperfect layout as fallback
             best_diff = diff
             best_rows = rows
     
-    # If we found any perfect layouts, choose the one closest to target ratio
+    # If we found any perfect layouts within constraints, choose the one closest to target ratio
     if perfect_layouts:
         best_rows = min(perfect_layouts, key=lambda x: x[1])[0]
+    # Otherwise use the best valid layout
+    elif valid_layouts:
+        best_rows = min(valid_layouts, key=lambda x: x[1])[0]
+    # If no valid layouts (shouldn't happen often), fall back to closest to target
+    # even if outside constraints - better than crashing
     
     return best_rows
 
