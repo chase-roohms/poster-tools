@@ -18,7 +18,7 @@ import argparse
 
 # Configuration
 gap_size = 10  # Pixels between images
-target_aspect_ratio = 4  # Target aspect ratio for the overall display
+target_aspect_ratio = 16/9  # Target aspect ratio for the overall display
 min_aspect_ratio = target_aspect_ratio * 0.75  # Minimum aspect ratio (~1.33:1, roughly 4:3)
 max_aspect_ratio = target_aspect_ratio * 1.35  # Maximum aspect ratio (~2.4:1, roughly 21:9)
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
