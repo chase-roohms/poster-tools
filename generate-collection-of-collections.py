@@ -22,6 +22,7 @@ gap_size = 20  # Pixels between images
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
 max_image_width = 600  # Downsize individual images to this width
 jpeg_quality = 85  # Quality for final output (1-100)
+collection_columns = 3  # Number of columns for movie collections
 
 
 def is_collection_poster(filename):
@@ -129,16 +130,16 @@ def resize_image_for_grid(img, target_width):
     return img.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
 
-def create_collection_display(collection_file, collections, standalones, background_file=None, target_width=max_image_width):
+def create_collection_display(collection_file, collections, standalones, background_file=None, target_width=max_image_width, num_columns=2):
     """
     Create a display with main collection poster on left and movie collections organized in columns on right.
-    Collections fill down two columns, standalones get their own column on the far right.
+    Collections fill down multiple columns, standalones get their own column on the far right.
     """
     # Calculate total number of rows needed
     # Height is determined by collections only, standalones wrap horizontally if needed
     has_standalones = len(standalones) > 0
     total_collections = len(collections)
-    total_rows = ceil(total_collections / 2)
+    total_rows = ceil(total_collections / num_columns)
     
     if total_rows == 0:
         # If no movies at all, just show the collection poster
@@ -193,18 +194,15 @@ def create_collection_display(collection_file, collections, standalones, backgro
     cell_height = all_movie_images[0].height
     
     # Calculate maximum number of movies in each column separately
-    left_column_collections = [collection_images for _, col_idx, _, collection_images in row_data if col_idx == 0]
-    right_column_collections = [collection_images for _, col_idx, _, collection_images in row_data if col_idx == 1]
-    
-    max_movies_left = max(len(c) for c in left_column_collections) if left_column_collections else 0
-    max_movies_right = max(len(c) for c in right_column_collections) if right_column_collections else 0
+    column_widths = []
+    for col in range(num_columns):
+        col_collections = [collection_images for _, col_idx, _, collection_images in row_data if col_idx == col]
+        max_movies = max(len(c) for c in col_collections) if col_collections else 0
+        col_width = max_movies * cell_width + (max_movies - 1) * gap_size if max_movies > 0 else 0
+        column_widths.append(col_width)
     
     # Standalones column - calculate how many columns needed
     standalone_cols_needed = ceil(len(standalones) / total_rows) if has_standalones else 0
-    
-    # Calculate width for each column
-    left_column_width = max_movies_left * cell_width + (max_movies_left - 1) * gap_size
-    right_column_width = max_movies_right * cell_width + (max_movies_right - 1) * gap_size
     standalone_column_width = (standalone_cols_needed * cell_width + (standalone_cols_needed - 1) * gap_size) if has_standalones else 0
     
     # Load and resize main collection poster to match total rows
@@ -221,7 +219,10 @@ def create_collection_display(collection_file, collections, standalones, backgro
     collection_width = collection_resized.width
     collection_height = collection_resized.height
     
-    right_section_width = left_column_width + (gap_size * 10) + right_column_width
+    # Sum up all collection column widths with gaps
+    right_section_width = sum(column_widths)
+    if len(column_widths) > 1:
+        right_section_width += (gap_size * 10) * (len(column_widths) - 1)
     if has_standalones:
         right_section_width += (gap_size * 10) + standalone_column_width
     right_section_height = (total_rows * cell_height) + ((total_rows - 1) * gap_size)
@@ -247,15 +248,14 @@ def create_collection_display(collection_file, collections, standalones, backgro
     # Paste collection poster on the left
     grid_image.paste(collection_resized, (gap_size, gap_size))
     
-    # Paste movie collections on the right (two collection columns)
+    # Paste movie collections on the right (multiple collection columns)
     x_offset = gap_size + collection_width + (gap_size * 10)
     
     for row_idx, col_idx, collection_name, collection_images in row_data:
         # Calculate starting x position for this collection
-        if col_idx == 0:
-            collection_x_start = x_offset
-        else:
-            collection_x_start = x_offset + left_column_width + (gap_size * 10)
+        collection_x_start = x_offset
+        for i in range(col_idx):
+            collection_x_start += column_widths[i] + (gap_size * 10)
         
         # Paste each movie in the collection
         for movie_idx, img in enumerate(collection_images):
@@ -265,7 +265,9 @@ def create_collection_display(collection_file, collections, standalones, backgro
     
     # Paste standalones in their own column area (wraps horizontally if needed)
     if has_standalones:
-        standalone_x_start = x_offset + left_column_width + (gap_size * 10) + right_column_width + (gap_size * 10)
+        standalone_x_start = x_offset
+        for col_width in column_widths:
+            standalone_x_start += col_width + (gap_size * 10)
         for standalone_row, standalone_col, movie_name, img in standalone_data:
             x = standalone_x_start + standalone_col * (cell_width + gap_size)
             y = gap_size + standalone_row * (cell_height + gap_size)
@@ -298,6 +300,12 @@ Poster Naming Scheme:
         type=str,
         default='collection-of-collections.jpg',
         help='Output filename (default: collection-of-collections.jpg)'
+    )
+    parser.add_argument(
+        '-c', '--columns',
+        type=int,
+        default=collection_columns,
+        help=f'Number of columns for movie collections (default: {collection_columns})'
     )
     
     args = parser.parse_args()
@@ -337,18 +345,18 @@ Poster Naming Scheme:
     
     # Calculate layout
     total_collections_for_display = len(collections)
-    total_rows = ceil(total_collections_for_display / 2)
+    total_rows = ceil(total_collections_for_display / args.columns)
     standalone_cols_needed = ceil(len(standalones) / total_rows) if standalones else 0
     print(f"\nLayout:")
     print(f"  Main collection: {total_rows} rows tall (left)")
-    print(f"  Movie collections: {len(collections)} collections in 2 columns (left/middle)")
+    print(f"  Movie collections: {len(collections)} collections in {args.columns} column(s) (middle)")
     if standalones:
         print(f"  Standalone movies: {len(standalones)} movies in {standalone_cols_needed} column(s) (right)")
     
     # Create the display
     print(f"\nGenerating display (resizing images to {max_image_width}px width)...")
     grid_image, row_data = create_collection_display(
-        collection_file, collections, standalones, background_file, max_image_width
+        collection_file, collections, standalones, background_file, max_image_width, args.columns
     )
     
     # Save the result
