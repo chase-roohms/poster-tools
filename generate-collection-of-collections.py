@@ -9,7 +9,7 @@ Poster Naming Scheme:
 - Standalone movies (without numbered collections) go in their own column.
 """
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageDraw, ImageFont
 import os
 from pathlib import Path
 from math import ceil
@@ -23,6 +23,14 @@ poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
 max_image_width = 600  # Downsize individual images to this width
 jpeg_quality = 85  # Quality for final output (1-100)
 collection_columns = 3  # Number of columns for movie collections
+reddit_username = "ChaseDak"  # For credit in output if desired
+tpdb_username = "NeonVariant"  # For credit in output if desired
+
+# Footer configuration
+footer_height = 80  # Height of footer section in pixels
+footer_icon_size = 40  # Size of social media icons
+footer_padding = 20  # Padding around footer content
+footer_spacing = 60  # Spacing between Reddit and TPDB sections
 
 
 def is_collection_poster(filename):
@@ -128,6 +136,132 @@ def resize_image_for_grid(img, target_width):
     aspect_ratio = img.height / img.width
     target_height = int(target_width * aspect_ratio)
     return img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+
+def add_footer(image, reddit_user, tpdb_user):
+    """Add a footer with Reddit and ThePosterDatabase credits."""
+    # Check if icon files exist
+    assets_path = Path('assets')
+    reddit_icon_path = assets_path / 'reddit-icon.png'
+    tpdb_icon_path = assets_path / 'tpdb-icon.png'
+    
+    if not reddit_icon_path.exists() or not tpdb_icon_path.exists():
+        print("Warning: Footer icons not found in assets/ directory. Skipping footer.")
+        return image
+    
+    # Dynamically scale footer based on image width
+    # Footer height is 2.5% of image width, minimum 80px
+    dynamic_footer_height = max(footer_height, int(image.width * 0.025))
+    # Icon size is 1.8% of image width, minimum 40px
+    dynamic_icon_size = max(footer_icon_size, int(image.width * 0.018))
+    # Font size scales with image width
+    dynamic_font_size = max(24, int(image.width * 0.010))
+    # Spacing scales too
+    dynamic_spacing = max(footer_spacing, int(image.width * 0.025))
+    dynamic_icon_text_gap = max(footer_padding, int(image.width * 0.005))
+    
+    # Create new image with footer space
+    new_width = image.width
+    new_height = image.height + dynamic_footer_height
+    
+    # Create base RGB image and paste original
+    footer_image = Image.new('RGB', (new_width, new_height), color='black')
+    footer_image.paste(image, (0, 0))
+    
+    # Extend the bottom edge of the image into footer area to show transparency effect
+    # Take the bottom 1px row and stretch it to fill footer area
+    footer_y_start = image.height
+    bottom_edge = image.crop((0, image.height - 1, image.width, image.height))
+    bottom_extended = bottom_edge.resize((new_width, dynamic_footer_height), Image.Resampling.NEAREST)
+    footer_image.paste(bottom_extended, (0, footer_y_start))
+    
+    # Create semi-transparent footer overlay
+    footer_overlay = Image.new('RGBA', (new_width, new_height), color=(0, 0, 0, 0))
+    draw_overlay = ImageDraw.Draw(footer_overlay)
+    
+    # Draw semi-transparent black rectangle for footer area
+    draw_overlay.rectangle(
+        [(0, footer_y_start), (new_width, new_height)],
+        fill=(0, 0, 0, 128)
+    )
+    
+    # Composite the overlay onto the base image
+    footer_image = Image.alpha_composite(footer_image.convert('RGBA'), footer_overlay).convert('RGB')
+    
+    # Load and resize icons
+    reddit_icon = Image.open(reddit_icon_path).convert('RGBA')
+    tpdb_icon = Image.open(tpdb_icon_path).convert('RGBA')
+    
+    reddit_icon = reddit_icon.resize((dynamic_icon_size, dynamic_icon_size), Image.Resampling.LANCZOS)
+    tpdb_icon = tpdb_icon.resize((dynamic_icon_size, dynamic_icon_size), Image.Resampling.LANCZOS)
+    
+    # Calculate positions for centered footer content
+    footer_y_start = image.height
+    icon_y = footer_y_start + (dynamic_footer_height - dynamic_icon_size) // 2
+    
+    # Create drawing context
+    draw = ImageDraw.Draw(footer_image)
+    
+    # Try to load a modern font with dynamic size, fall back if not available
+    font_paths = [
+        '/System/Library/Fonts/Supplemental/Roboto-Regular.ttf',  # Roboto
+        '/Library/Fonts/Roboto-Regular.ttf',  # Roboto (user-installed)
+        '~/Library/Fonts/Roboto-Regular.ttf',  # Roboto (user fonts)
+        '/System/Library/Fonts/Avenir.ttc',  # Avenir - modern geometric
+        '/System/Library/Fonts/Supplemental/Futura.ttc',  # Futura - geometric
+        '/System/Library/Fonts/Supplemental/Gotham.ttf',  # Gotham if available
+        '/System/Library/Fonts/Helvetica.ttc',  # Fallback
+    ]
+    
+    font = None
+    for font_path in font_paths:
+        try:
+            font = ImageFont.truetype(font_path, dynamic_font_size)
+            break
+        except:
+            continue
+    
+    if font is None:
+        font = ImageFont.load_default()
+    
+    # Measure text sizes
+    reddit_text = f"u/{reddit_user}"
+    tpdb_text = f"@{tpdb_user}"
+    
+    # Calculate bounding boxes for text
+    reddit_bbox = draw.textbbox((0, 0), reddit_text, font=font)
+    tpdb_bbox = draw.textbbox((0, 0), tpdb_text, font=font)
+    reddit_text_width = reddit_bbox[2] - reddit_bbox[0]
+    tpdb_text_width = tpdb_bbox[2] - tpdb_bbox[0]
+    text_height = reddit_bbox[3] - reddit_bbox[1]
+    
+    # Calculate total width for both sections
+    reddit_section_width = dynamic_icon_size + dynamic_icon_text_gap + reddit_text_width
+    tpdb_section_width = dynamic_icon_size + dynamic_icon_text_gap + tpdb_text_width
+    total_content_width = reddit_section_width + dynamic_spacing + tpdb_section_width
+    
+    # Center everything
+    start_x = (new_width - total_content_width) // 2
+    
+    # Reddit section
+    reddit_icon_x = start_x
+    reddit_text_x = reddit_icon_x + dynamic_icon_size + dynamic_icon_text_gap
+    # Better vertical centering: align text baseline with icon center, accounting for descenders
+    text_y = footer_y_start + (dynamic_footer_height - text_height) // 2 - reddit_bbox[1]
+    
+    # Paste Reddit icon with transparency
+    footer_image.paste(reddit_icon, (reddit_icon_x, icon_y), reddit_icon)
+    draw.text((reddit_text_x, text_y), reddit_text, fill='white', font=font)
+    
+    # TPDB section
+    tpdb_icon_x = reddit_text_x + reddit_text_width + dynamic_spacing
+    tpdb_text_x = tpdb_icon_x + dynamic_icon_size + dynamic_icon_text_gap
+    
+    # Paste TPDB icon with transparency
+    footer_image.paste(tpdb_icon, (tpdb_icon_x, icon_y), tpdb_icon)
+    draw.text((tpdb_text_x, text_y), tpdb_text, fill='white', font=font)
+    
+    return footer_image
 
 
 def create_collection_display(collection_file, collections, standalones, background_file=None, target_width=max_image_width, num_columns=2):
@@ -359,15 +493,19 @@ Poster Naming Scheme:
         collection_file, collections, standalones, background_file, max_image_width, args.columns
     )
     
+    # Add footer with credits
+    print("Adding footer with credits...")
+    final_image = add_footer(grid_image, reddit_username, tpdb_username)
+    
     # Save the result
     print(f"Saving to {args.output}...")
-    grid_image.save(args.output, 'JPEG', quality=jpeg_quality, optimize=True)
+    final_image.save(args.output, 'JPEG', quality=jpeg_quality, optimize=True)
     
     # Get file size
     file_size_mb = os.path.getsize(args.output) / (1024 * 1024)
     print(f"\n✓ Display created successfully!")
     print(f"  Output: {args.output}")
-    print(f"  Dimensions: {grid_image.width}x{grid_image.height}px")
+    print(f"  Dimensions: {final_image.width}x{final_image.height}px")
     print(f"  File size: {file_size_mb:.2f} MB")
 
 
