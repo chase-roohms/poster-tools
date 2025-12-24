@@ -18,13 +18,14 @@ import argparse
 from collections import defaultdict
 
 # Configuration
-gap_size = 20  # Pixels between images
+gap_size = 10  # Pixels between images
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
-max_image_width = 600  # Downsize individual images to this width
+max_image_width = 300  # Downsize individual images to this width
 jpeg_quality = 85  # Quality for final output (1-100)
 collection_columns = 3  # Number of columns for movie collections
 reddit_username = "ChaseDak"  # For credit in output if desired
 tpdb_username = "NeonVariant"  # For credit in output if desired
+poster_dimensions = "2000x3000"  # Standard poster dimensions for reference
 
 # Footer configuration
 footer_height = 80  # Height of footer section in pixels
@@ -144,8 +145,9 @@ def add_footer(image, reddit_user, tpdb_user):
     assets_path = Path('assets')
     reddit_icon_path = assets_path / 'reddit-icon.png'
     tpdb_icon_path = assets_path / 'tpdb-icon.png'
+    dimension_icon_path = assets_path / 'dimension-icon.png'
     
-    if not reddit_icon_path.exists() or not tpdb_icon_path.exists():
+    if not reddit_icon_path.exists() or not tpdb_icon_path.exists() or not dimension_icon_path.exists():
         print("Warning: Footer icons not found in assets/ directory. Skipping footer.")
         return image
     
@@ -191,9 +193,11 @@ def add_footer(image, reddit_user, tpdb_user):
     # Load and resize icons
     reddit_icon = Image.open(reddit_icon_path).convert('RGBA')
     tpdb_icon = Image.open(tpdb_icon_path).convert('RGBA')
+    dimension_icon = Image.open(dimension_icon_path).convert('RGBA')
     
     reddit_icon = reddit_icon.resize((dynamic_icon_size, dynamic_icon_size), Image.Resampling.LANCZOS)
     tpdb_icon = tpdb_icon.resize((dynamic_icon_size, dynamic_icon_size), Image.Resampling.LANCZOS)
+    dimension_icon = dimension_icon.resize((dynamic_icon_size, dynamic_icon_size), Image.Resampling.LANCZOS)
     
     # Calculate positions for centered footer content
     footer_y_start = image.height
@@ -227,24 +231,30 @@ def add_footer(image, reddit_user, tpdb_user):
     # Measure text sizes
     reddit_text = f"u/{reddit_user}"
     tpdb_text = f"@{tpdb_user}"
+    dimension_text = poster_dimensions
     
     # Calculate bounding boxes for text
     reddit_bbox = draw.textbbox((0, 0), reddit_text, font=font)
     tpdb_bbox = draw.textbbox((0, 0), tpdb_text, font=font)
+    dimension_bbox = draw.textbbox((0, 0), dimension_text, font=font)
     reddit_text_width = reddit_bbox[2] - reddit_bbox[0]
     tpdb_text_width = tpdb_bbox[2] - tpdb_bbox[0]
+    dimension_text_width = dimension_bbox[2] - dimension_bbox[0]
     text_height = reddit_bbox[3] - reddit_bbox[1]
     
-    # Calculate total width for both sections
+    # Calculate section widths
     reddit_section_width = dynamic_icon_size + dynamic_icon_text_gap + reddit_text_width
     tpdb_section_width = dynamic_icon_size + dynamic_icon_text_gap + tpdb_text_width
-    total_content_width = reddit_section_width + dynamic_spacing + tpdb_section_width
+    dimension_section_width = dynamic_icon_size + dynamic_icon_text_gap + dimension_text_width
     
-    # Center everything
-    start_x = (new_width - total_content_width) // 2
+    # Calculate social sections width (center these)
+    social_content_width = reddit_section_width + dynamic_spacing + tpdb_section_width
+    
+    # Center social sections
+    social_start_x = (new_width - social_content_width) // 2
     
     # Reddit section
-    reddit_icon_x = start_x
+    reddit_icon_x = social_start_x
     reddit_text_x = reddit_icon_x + dynamic_icon_size + dynamic_icon_text_gap
     # Better vertical centering: align text baseline with icon center, accounting for descenders
     text_y = footer_y_start + (dynamic_footer_height - text_height) // 2 - reddit_bbox[1]
@@ -260,6 +270,14 @@ def add_footer(image, reddit_user, tpdb_user):
     # Paste TPDB icon with transparency
     footer_image.paste(tpdb_icon, (tpdb_icon_x, icon_y), tpdb_icon)
     draw.text((tpdb_text_x, text_y), tpdb_text, fill='white', font=font)
+    
+    # Dimension section (right-aligned)
+    dimension_text_x = new_width - footer_padding - dimension_text_width
+    dimension_icon_x = dimension_text_x - dynamic_icon_text_gap - dynamic_icon_size
+    
+    # Paste Dimension icon with transparency
+    footer_image.paste(dimension_icon, (dimension_icon_x, icon_y), dimension_icon)
+    draw.text((dimension_text_x, text_y), dimension_text, fill='white', font=font)
     
     return footer_image
 
