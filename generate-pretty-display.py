@@ -24,7 +24,7 @@ max_aspect_ratio = target_aspect_ratio * 1.35  # Maximum aspect ratio (~2.4:1, r
 poster_aspect_ratio = 2 / 3  # Standard poster aspect ratio (width/height)
 max_image_width = 600  # Downsize individual images to this width (will be adjusted)
 jpeg_quality = 85  # Quality for final output (1-100)
-rows = 1  # Set to a specific number to override auto-calculation, or None for auto
+rows = None  # Set to a specific number to override auto-calculation, or None for auto
 
 # Footer configuration
 footer_height = 80  # Height of footer section in pixels
